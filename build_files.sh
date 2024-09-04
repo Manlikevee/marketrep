@@ -17,3 +17,5 @@ echo "BUILD END"
 
 # [optional] Start the application here 
 # python manage.py runserver
+
+#2012 6 months renew $150    2019 950 + 250 = 1200
