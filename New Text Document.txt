@@ -1,0 +1,28 @@
+
+1. Variables and Data Types:
+
+let name = "John"; // string
+const age = 30; // number
+let isDeveloper = true; // boolean
+let user = { name: "John", age: 30 }; // object
+let hobbies = ["reading", "gaming"]; // array (object type)
+let unknown = undefined; // undefined
+let nothing = null; // null
+
+2. Operators:
+let a = 10, b = 20;
+console.log(a + b); // 30 (addition)
+console.log(a === b); // false (strict comparison)
+console.log(a < b && b > 15); // true (logical AND)
+
+
+3. Conditionals (if-else):
+JavaScript:
+let score = 85;
+if (score > 90) {
+  console.log("A grade");
+} else if (score > 75) {
+  console.log("B grade");
+} else {
+  console.log("C grade");
+}
