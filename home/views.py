@@ -1,10 +1,16 @@
+import json
 import re
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect
 from django.template.defaulttags import now
 from django.utils import timezone
+from rest_framework import status
+from rest_framework.views import APIView
 
-from .models import market_data
+from .models import market_data, pep_data, fx_data
+
+
+# from .serializer import ProductSerializer
 
 
 # from mykeycloakdjango.home.models import market_data
@@ -37,49 +43,59 @@ import re
 # from .models import Product
 
 
+class ProductListView(APIView):
+    def get(self, request):
+        products = Product.objects.all()
+        serializer = ProductSerializer(products, many=True)
+
+        # Save the serialized data to a JSON file
+        with open('products.json', 'w') as json_file:
+            json.dump(serializer.data, json_file, indent=4)
+
+        return Response(serializer.data)
+
+
+
+
 # def scrape_jumia(request):
-#     api_endpoint = "https://vee-commerce.cyclic.app/product"
-#     base_url = 'https://www.jumia.com.ng/smartphones/?page='
+#     api_endpoint = "https://www.jumia.com.ng/phones-tablets/"
+#     base_url = api_endpoint
 #     page_number = 1
-#     iphone_description_template = (
-#         "Embark on a delightful journey through the world of beverages with {product_name}. This exceptional drink collection not only sets a new standard but also redefines the very essence of liquid indulgence. Immerse yourself in a diverse array of innovative flavors, each telling its own story and pushing the boundaries of taste and quality. Step into a world where {product_name} transcends the ordinary, introducing you to a realm of drink possibilities previously unexplored. Bid farewell to conventional beverage experiences as this collection weaves together a seamless and boundary-breaking sipping adventure, promising to elevate your every sip and tantalize your taste buds in ways you never thought possible."
-#     )
 #
 #     while True:
-#         url = f'{base_url}{page_number}'
+#         url = f'{base_url}?page={page_number}'
 #         response = requests.get(url)
 #         soup = BeautifulSoup(response.content, 'html.parser')
 #         products = soup.find_all('a', class_='core')
-#         print(products)
+#         # print(products)
 #
 #         if not products:
 #             break
 #
 #         for product in products:
-#             name_tag = product.find('div', class_='name')
+#             name_tag = product.get('data-gtm-name')
 #             image_tag = product.find('img')
 #             price_tag = product.find('div', class_='prc')
+#             category_tag = product.get('data-gtm-category')
+#             print(name_tag)
 #
-#             if not name_tag or not image_tag or not price_tag:
+#             if not name_tag or not image_tag or not price_tag or not category_tag:
 #                 continue  # Skip this product if any of the required fields are missing
 #
-#             name = name_tag.text.strip()
+#             name = name_tag.strip()
 #             image = image_tag.get('data-src')
 #             price = price_tag.text.strip()
-#             print(name)
-#             if not name or not image or not price:
+#             category = category_tag
+#
+#             if not name or not image or not price or not category:
 #                 continue  # Skip if any of the fields are empty
 #
 #             price_numeric = int(re.search(r'\d+', price.replace(',', '')).group())
 #
-#             description = iphone_description_template.format(
-#                 product_name=name
-#             )
-#
 #             # Check if the product already exists before creating a new one
 #             existing_product = Product.objects.filter(name=name).exists()
 #             if not existing_product:
-#                 Product.objects.create(name=name, image=image, price=price_numeric)
+#                 Product.objects.create(name=name, image=image, price=price_numeric, category=category)
 #                 print(f'{name} added to the database.')
 #
 #         page_number += 1
@@ -387,3 +403,227 @@ def get_table_12_data(request):
         return Response(data)
     else:
         return Response({'error': 'Failed to retrieve table data or table not found'}, status=404)
+
+
+class PepDataView(APIView):
+    def get(self, request):
+        today = timezone.now().date()
+        existing_data = pep_data.objects.filter(as_at__date=today)
+
+        if existing_data.exists():
+            print("Returning existing data for today.")
+            data = existing_data.first().pep_data  # Return the first entry or modify as needed
+            return Response(data, status=status.HTTP_200_OK)
+        else:
+            print("No data found for today. Scraping new data...")
+            return self.scrape_and_save_data()
+
+    def scrape_and_save_data(self):
+        number = 25
+        all_data = []
+
+        for i in range(1, 10000):
+            url = f'https://www.opensanctions.org/search/?countries=ng&offset={number}&topics=role.pep'
+            number += 25
+
+            response = requests.get(url)
+
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.content, 'html.parser')
+                data_needed = soup.find('ul', class_='Search_resultList___zt_F')
+
+                if data_needed:
+                    rows = data_needed.find_all('li')
+                    for row in rows:
+                        name = row.find('a').get_text(strip=True)
+                        person_of_interest = row.find('span', 'bg-warning').get_text(strip=True)
+                        all_data.append({'name': name, 'person_of_interest': person_of_interest})
+                        print(len(all_data))
+                else:
+                    print("Information not found.")
+            else:
+                if all_data:
+                    pep_data.objects.create(pep_data=all_data)
+                    return Response(all_data, status=status.HTTP_201_CREATED)
+                print(f"Failed to retrieve the page status code: {response.status_code}")
+
+        # Save data to the database
+        pep_data.objects.create(pep_data=all_data)
+        return Response(all_data, status=status.HTTP_201_CREATED)
+
+
+
+
+
+# API_ID = 25801134  # Your API ID
+# API_HASH = '2057aa75a2c3fe58cc8910709b33e5cb'  # Your API hash
+# PHONE_NUMBER = '+2348165201384'
+# import asyncio
+# from telethon.sync import TelegramClient
+# class SendMessageView(APIView):
+#     """
+#     API View to send a message via Telegram using Telethon.
+#     """
+#
+#     def send_telegram_message_sync(self, recipient, message):
+#         async def send_message():
+#             client = TelegramClient('session_name', API_ID, API_HASH)
+#             await client.start(phone=PHONE_NUMBER)
+#
+#             try:
+#                 await client.send_message(recipient, message)
+#             finally:
+#                 await client.disconnect()
+#
+#         # Run the async function using asyncio.run()
+#         asyncio.run(send_message())
+#
+#     def post(self, request):
+#         recipient = request.data.get('recipient')
+#         message = request.data.get('message')
+#
+#         if not recipient or not message:
+#             return Response({"error": "Recipient and message are required."}, status=status.HTTP_400_BAD_REQUEST)
+#
+#         try:
+#             # Call the synchronous wrapper for the async function
+#             self.send_telegram_message_sync(recipient, message)
+#
+#             return Response({"status": "Message sent successfully"}, status=status.HTTP_200_OK)
+#         except Exception as e:
+#             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+#
+#
+# import csv
+# import os
+# import io
+# from rest_framework.views import APIView
+# from rest_framework.response import Response
+# from rest_framework import status
+# import dns.resolver
+# from validate_email_address import validate_email
+#
+#
+# class EmailValidationView(APIView):
+#     """
+#     API View to validate email addresses and return active/inactive lists, and save a CSV file locally.
+#     """
+#
+#     def get_mx_record(self, domain):
+#         """Check if a domain has MX records (i.e., can receive emails) using dnspython."""
+#         try:
+#             records = dns.resolver.resolve(domain, 'MX')
+#             return bool(records)
+#         except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN, dns.exception.Timeout):
+#             return False
+#
+#     def validate_email_address(self, email):
+#         """Check if the email address format is valid and if the domain has MX records."""
+#         is_valid_format = validate_email(email)  # Checks email format
+#
+#         if is_valid_format:
+#             domain = email.split('@')[-1]
+#             has_mx_record = self.get_mx_record(domain)
+#             return has_mx_record
+#
+#         return False
+#
+#     def create_csv(self, active_emails, inactive_emails):
+#         """Create a CSV file containing active and inactive emails and save it to the current directory."""
+#         # Define the CSV filename and path
+#         csv_filename = 'email_validation_results.csv'
+#         csv_filepath = os.path.join(os.getcwd(), csv_filename)
+#
+#         # Open the file and write the CSV content
+#         with open(csv_filepath, mode='w', newline='') as file:
+#             writer = csv.writer(file)
+#             writer.writerow(['Active Emails', 'Inactive Emails'])
+#
+#             # Write rows for both active and inactive emails
+#             max_len = max(len(active_emails), len(inactive_emails))
+#             for i in range(max_len):
+#                 active = active_emails[i] if i < len(active_emails) else ''
+#                 inactive = inactive_emails[i] if i < len(inactive_emails) else ''
+#                 writer.writerow([active, inactive])
+#
+#         return csv_filepath
+#
+#     def post(self, request):
+#         """
+#         Validate a list of email addresses, return active and inactive lists,
+#         and save the CSV file to the current directory.
+#         """
+#         email_list = request.data.get('emails', [])
+#         if not isinstance(email_list, list):
+#             return Response({"detail": "Invalid data. Expected a list of emails."}, status=status.HTTP_400_BAD_REQUEST)
+#
+#         active_emails = []
+#         inactive_emails = []
+#
+#         for email in email_list:
+#             print(email)
+#             if self.validate_email_address(email):
+#                 active_emails.append(email)
+#             else:
+#                 inactive_emails.append(email)
+#
+#         # Create and save the CSV file in the current directory
+#         csv_filepath = self.create_csv(active_emails, inactive_emails)
+#
+#         return Response({
+#             'active_emails': active_emails,
+#             'inactive_emails': inactive_emails,
+#             'csv_file_path': csv_filepath  # Path to the saved CSV file
+#         }, status=status.HTTP_200_OK)
+
+
+def scrape_closing_rate():
+    today = timezone.now().date()
+    # Define the URL to scrape
+    url = 'https://fmdqgroup.com/exchange/'
+
+    # Make an HTTP GET request to fetch the HTML content
+    response = requests.get(url)
+    soup = BeautifulSoup(response.content, 'html.parser')
+
+    # Search for text containing "NAFEM Closing rate"
+    text = soup.find(text=lambda t: 'NAFEM Closing rate' in t)
+
+    if text:
+        # Assuming the format is "NAFEM Closing rate $/₦1600.78", we extract the rate
+        closing_rate_text = text.strip()
+
+        # Extract the numeric value, splitting by "$" and "₦"
+        closing_rate = closing_rate_text.split('$')[1].split('₦')[1].strip()
+
+        # Convert to a float for easier processing
+        closing_rate = float(closing_rate)
+
+        # Get today's date (without time)
+
+        # Check if the data for today already exists
+        existing_record = fx_data.objects.filter(as_at__date=today).first()
+
+        if existing_record:
+            # If a record for today exists, update it
+            existing_record.closingrate = closing_rate
+            existing_record.save()
+            message = "Updated today's NAFEM closing rate."
+        else:
+            # If no record for today, create a new one
+            fx_data.objects.create(closingrate=closing_rate, as_at=today)
+            message = "Created new record for today's NAFEM closing rate."
+
+        # Return response with the updated or created data
+        return Response({
+            'message': message,
+            'closing_rate': closing_rate,
+            'as_at': today
+        })
+    else:
+        return Response({'error': 'Could not find the NAFEM Closing rate on the page.'}, status=404)
+
+
+@api_view(['GET'])
+def get_nafem_closing_rate(request):
+    return scrape_closing_rate()
