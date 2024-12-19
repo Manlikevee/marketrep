@@ -19,4 +19,6 @@ urlpatterns = [
     # path('products/', ProductListView.as_view()),
     # path('validate-emails/', EmailValidationView.as_view(), name='validate_emails'),
     path('scrape-nafem/', get_nafem_closing_rate, name='scrape-nafem'),
+    path('api/form-submission/', FormSubmissionView.as_view(), name='form_submission'),
+    path('account-opening-submissions/', fetch_all_account_opening_submissions, name='fetch_all_submissions'),
     ]

@@ -34,3 +34,12 @@ class fx_data(models.Model):
     as_at = models.DateTimeField(default=now)
     def __str__(self):
         return self.as_at
+    
+
+class Account_opening_Submission(models.Model):
+    name = models.CharField(max_length=255, blank=True, null=True)
+    data = models.JSONField(default=list , blank=True, null=True)
+    submitted_at = models.DateTimeField(auto_now_add=True)
+    created_as_at = models.DateTimeField(default=now)
+    def __str__(self):
+        return self.name
